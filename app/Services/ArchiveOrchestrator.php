@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Archive;
 use App\Models\AgentArchiveLink;
-use Illuminate\Support\Facades\DB;
 
 class ArchiveOrchestrator
 {
@@ -14,33 +13,35 @@ class ArchiveOrchestrator
         protected ContentDmClient $contentdm,
     ) {}
 
-    /**
-     * Sync archive records by LCCN.
-     * $agentMap: associative array of lccn => [agent_citi_ids].
-     */
     public function syncByLccn(array $agentMap): void
     {
-        $allLccns = array_keys($agentMap);
-        $batches = array_chunk($allLccns, config('archives.batch_size', 50));
-
-        foreach ($batches as $batch) {
+        foreach ($agentMap as $lccn => $agentIds) {
             try {
-                $records = $this->alma->searchByLccnBatch($batch);
+                $records = $this->alma->searchByLccn($lccn);
             } catch (\Exception $e) {
                 report($e);
                 continue;
             }
 
             foreach ($records as $record) {
-                $this->processAlmaRecord($record, $agentMap);
+                $lccns = !empty($record['lccns']) ? $record['lccns'] : [$lccn];
+
+                $this->storeRecord(
+                    title: $record['title'],
+                    lccn: $lccns,
+                    mmsId: $record['mms_id'],
+                    fileUrls: array_column($record['file_urls'], 'url'),
+                    matchType: 'lccn',
+                    matchConfidence: 'positive',
+                    sourceMeta: ['alma' => $record],
+                    agentCitiIds: $agentIds,
+                );
             }
+
+            sleep(1);
         }
     }
 
-    /**
-     * Sync archive records by artist name.
-     * $nameMap: associative array of agent_citi_id => agent_title.
-     */
     public function syncByName(array $nameMap): void
     {
         foreach ($nameMap as $citiId => $title) {
@@ -52,32 +53,39 @@ class ArchiveOrchestrator
             }
 
             foreach ($results as $result) {
-                $this->processPrimoResult($result, [$citiId], 'tentative');
+                if (stripos($result['title'], $title) === false) {
+                    continue;
+                }
+
+                $this->storeRecord(
+                    title: $result['title'],
+                    lccn: [$result['lccn']],
+                    mmsId: $result['mms_id'],
+                    fileUrls: $result['files'] ?? [],
+                    matchType: 'name',
+                    matchConfidence: 'tentative',
+                    sourceMeta: ['primo' => $result],
+                    agentCitiIds: [$citiId],
+                );
             }
 
-            // Rate limit: space requests by 1 second
             sleep(1);
         }
     }
 
-    /**
-     * Process a record from Alma SRU response.
-     */
-    protected function processAlmaRecord(array $record, array $agentMap): void
-    {
-        // Find which agent CITI IDs map to the LCCNs in this record
-        $agentCitiIds = [];
-        foreach ($record['lccns'] as $lccn) {
-            if (isset($agentMap[$lccn])) {
-                $agentCitiIds = array_merge($agentCitiIds, $agentMap[$lccn]);
-            }
-        }
-        $agentCitiIds = array_unique($agentCitiIds);
-
-        // Resolve ContentDM metadata for the first file URL
+    protected function storeRecord(
+        string $title,
+        array $lccn,
+        string $mmsId,
+        array $fileUrls,
+        string $matchType,
+        string $matchConfidence,
+        array $sourceMeta,
+        array $agentCitiIds,
+    ): void {
         $contentdmMeta = null;
-        foreach ($record['file_urls'] as $fileUrl) {
-            $parsed = $this->contentdm->parseUrl($fileUrl['url']);
+        foreach ($fileUrls as $url) {
+            $parsed = $this->contentdm->parseUrl($url);
             if ($parsed) {
                 try {
                     $contentdmMeta = $this->contentdm->getItem($parsed['collection'], $parsed['id']);
@@ -86,92 +94,31 @@ class ArchiveOrchestrator
                 }
                 break;
             }
-        }
-
-        $this->upsertArchive([
-            'title' => $record['title'],
-            'lccn' => $record['lccns'],
-            'mms_id' => $record['mms_id'],
-            'contentdm_collection' => $contentdmMeta['contentdm_collection'] ?? null,
-            'contentdm_id' => $contentdmMeta['contentdm_id'] ?? null,
-            'contentdm_url' => $contentdmMeta['contentdm_url'] ?? ($record['file_urls'][0]['url'] ?? null),
-            'web_url' => null,
-            'match_type' => 'lccn',
-            'match_confidence' => 'positive',
-            'metadata' => [
-                'alma' => $record,
-                'contentdm' => $contentdmMeta,
-            ],
-        ], $agentCitiIds);
-
-        // Rate limit ContentDM calls
-        sleep(1);
-    }
-
-    /**
-     * Process a result from Primo search.
-     */
-    protected function processPrimoResult(array $result, array $agentCitiIds, string $confidence): void
-    {
-        // Resolve ContentDM metadata from the primo file URL
-        $contentdmMeta = null;
-        foreach ($result['files'] as $fileUrl) {
-            $parsed = $this->contentdm->parseUrl($fileUrl);
-            if ($parsed) {
-                try {
-                    $contentdmMeta = $this->contentdm->getItem($parsed['collection'], $parsed['id']);
-                } catch (\Exception $e) {
-                    report($e);
-                }
-                break;
-            }
-        }
-
-        $this->upsertArchive([
-            'title' => $result['title'],
-            'lccn' => [$result['lccn']],
-            'mms_id' => $result['mms_id'],
-            'contentdm_collection' => $contentdmMeta['contentdm_collection'] ?? null,
-            'contentdm_id' => $contentdmMeta['contentdm_id'] ?? null,
-            'contentdm_url' => $contentdmMeta['contentdm_url'] ?? ($result['files'][0] ?? null),
-            'web_url' => null,
-            'match_type' => 'name',
-            'match_confidence' => $confidence,
-            'metadata' => [
-                'primo' => $result,
-                'contentdm' => $contentdmMeta,
-            ],
-        ], $agentCitiIds);
-
-        // Rate limit ContentDM calls
-        sleep(1);
-    }
-
-    /**
-     * Upsert an archive record by MMS ID and create agent links.
-     */
-    protected function upsertArchive(array $data, array $agentCitiIds): void
-    {
-        if (empty($data['mms_id'])) {
-            return;
         }
 
         $archive = Archive::updateOrCreate(
-            ['mms_id' => $data['mms_id']],
-            $data
+            ['mms_id' => $mmsId],
+            [
+                'title' => $title,
+                'lccn' => $lccn,
+                'mms_id' => $mmsId,
+                'contentdm_collection' => $contentdmMeta['contentdm_collection'] ?? null,
+                'contentdm_id' => $contentdmMeta['contentdm_id'] ?? null,
+                'contentdm_url' => $contentdmMeta['contentdm_url'] ?? ($fileUrls[0] ?? null),
+                'web_url' => null,
+                'match_type' => $matchType,
+                'match_confidence' => $matchConfidence,
+                'metadata' => $sourceMeta + ['contentdm' => $contentdmMeta],
+            ]
         );
 
         foreach ($agentCitiIds as $citiId) {
             AgentArchiveLink::updateOrCreate(
-                [
-                    'agent_citi_id' => $citiId,
-                    'archive_id' => $archive->id,
-                ],
-                [
-                    'match_type' => $data['match_type'],
-                    'match_confidence' => $data['match_confidence'],
-                ]
+                ['agent_citi_id' => $citiId, 'archive_id' => $archive->id],
+                ['match_type' => $matchType, 'match_confidence' => $matchConfidence],
             );
         }
+
+        sleep(1);
     }
 }

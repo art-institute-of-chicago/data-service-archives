@@ -10,14 +10,25 @@ class ArchiveController extends Controller
 {
     public function index()
     {
+        $perPage = min((int) request()->input('limit', 100), 500);
+
         $archives = Archive::orderBy('updated_at', 'desc')
             ->orderBy('id', 'desc')
-            ->paginate(request()->input('limit', 12));
+            ->paginate($perPage);
 
-        return fractal()
-            ->collection($archives)
-            ->transformWith(new ArchiveTransformer())
-            ->respond();
+        return response()->json([
+            'data' => fractal()
+                ->collection($archives)
+                ->transformWith(new ArchiveTransformer())
+                ->toArray()['data'],
+            'pagination' => [
+                'total' => $archives->total(),
+                'limit' => $archives->perPage(),
+                'offset' => ($archives->currentPage() - 1) * $archives->perPage(),
+                'total_pages' => $archives->lastPage(),
+                'current_page' => $archives->currentPage(),
+            ],
+        ]);
     }
 
     public function show($id)

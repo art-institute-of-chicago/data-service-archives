@@ -16,22 +16,13 @@ class AlmaSruClient
         $this->http = new Client(['timeout' => 30]);
     }
 
-    /**
-     * Search by single LCCN. Returns array of {mms_id, title, lccns[], file_urls[]}.
-     */
     public function searchByLccn(string $lccn): array
     {
-        return $this->searchByLccnBatch([$lccn]);
+        return $this->executeSearch('alma.authority_id=' . $lccn);
     }
 
-    /**
-     * Search by multiple LCCNs (up to 50 OR'd together).
-     */
-    public function searchByLccnBatch(array $lccns): array
+    protected function executeSearch(string $query): array
     {
-        $clauses = array_map(fn ($l) => 'alma.lccn="' . $l . '"', $lccns);
-        $query = implode(' or ', $clauses);
-
         $response = $this->http->get($this->baseUrl, [
             'query' => [
                 'version' => '1.2',

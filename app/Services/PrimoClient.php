@@ -31,7 +31,7 @@ class PrimoClient
                     'vid' => config('archives.primo_vid'),
                     'tab' => 'ARCHIVES',
                     'scope' => 'ARCHIVES',
-                    'q' => 'any,contains,' . $name,
+                    'q' => 'creator,contains,' . $name,
                     'skipDelivery' => 'false',
                     'limit' => $limit,
                     'offset' => $offset,

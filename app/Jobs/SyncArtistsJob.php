@@ -8,50 +8,45 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use App\Api\Agent as AgentApi;
+use App\Services\ArchiveOrchestrator;
 
 class SyncArtistsJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public function handle(): void
+    public function handle(ArchiveOrchestrator $orchestrator): void
     {
         $api = new AgentApi();
-        $agentMap = []; // lccn => [agent_ids]
+        $lccnMap = [];
+        $nameMap = [];
         $page = 1;
 
         do {
             $data = $api->search([
-                'fields' => 'id,title,lccn',
+                'fields' => 'id,title,vocab_ids',
                 'limit' => 100,
                 'page' => $page,
-                'query' => ['exists' => ['field' => 'lccn']],
+                'query' => ['term' => ['is_artist' => true]],
             ]);
 
-            if (empty($data)) {
-                break;
-            }
-
             foreach ($data as $agent) {
-                $lccnList = $agent['lccn'] ?? [];
-                if (empty($lccnList)) {
-                    continue;
-                }
-                foreach ((array) $lccnList as $lccn) {
-                    $agentMap[$lccn][] = $agent['id'];
+                $lccn = $agent['vocab_ids']['lccn'] ?? null;
+                if (!empty($lccn)) {
+                    $lccnMap[$lccn][] = $agent['id'];
+                } elseif (!empty($agent['title'])) {
+                    $nameMap[$agent['id']] = $agent['title'];
                 }
             }
 
             $page++;
-        } while ($page <= 10);
+        } while (!empty($data) && $page <= 10);
 
-        $lccns = array_keys($agentMap);
-        $batches = array_chunk($lccns, config('archives.batch_size', 50));
-
-        foreach ($batches as $batch) {
-            $batchMap = array_intersect_key($agentMap, array_flip($batch));
-            SyncLccnBatchJob::dispatch($batchMap);
+        if (!empty($lccnMap)) {
+            $orchestrator->syncByLccn($lccnMap);
         }
 
-        SyncNamesBatchJob::dispatch();
+        if (!empty($nameMap)) {
+            $orchestrator->syncByName($nameMap);
+        }
     }
 }
