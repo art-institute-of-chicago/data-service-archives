@@ -11,7 +11,8 @@ class ArchiveOrchestrator
         protected AlmaSruClient $alma,
         protected PrimoClient $primo,
         protected ContentDmClient $contentdm,
-    ) {}
+    ) {
+    }
 
     public function syncByLccn(array $agentMap): void
     {

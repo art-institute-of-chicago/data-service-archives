@@ -12,7 +12,10 @@ use App\Services\ArchiveOrchestrator;
 
 class SyncArtistsJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
     public function handle(ArchiveOrchestrator $orchestrator): void
     {
