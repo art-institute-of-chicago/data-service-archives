@@ -22,6 +22,7 @@ class ArchiveApiTest extends TestCase
                     'contentdm_collection', 'contentdm_id', 'contentdm_url',
                     'web_url', 'match_type', 'match_confidence',
                     'metadata', 'agent_citi_ids',
+                    'collection_type', 'record_type', 'has_media',
                 ],
             ],
         ]);
