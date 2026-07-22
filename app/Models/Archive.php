@@ -12,7 +12,11 @@ class Archive extends Model
     protected $guarded = [];
     protected $casts = [
         'lccn' => 'array',
+        'subjects' => 'array',
         'metadata' => 'array',
+        'collection_type' => 'string',
+        'record_type' => 'string',
+        'has_media' => 'boolean',
     ];
 
     public function agentLinks()
