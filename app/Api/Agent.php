@@ -2,6 +2,7 @@
 
 namespace App\Api;
 
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -21,7 +22,7 @@ class Agent
         $query = $params['query'] ?? [];
         unset($params['query']);
 
-        $response = Http::asJson()->post($this->baseUrl . '/agents/search', [
+        $response = $this->client()->asJson()->post($this->baseUrl . '/agents/search', [
             'query' => $query,
             'fields' => $params['fields'] ?? '',
             'limit' => $params['limit'] ?? 12,
@@ -33,7 +34,14 @@ class Agent
 
     public function find(int|string $id): ?array
     {
-        $response = Http::get($this->baseUrl . '/agents/' . $id);
+        $response = $this->client()->get($this->baseUrl . '/agents/' . $id);
         return $response->json('data');
+    }
+
+    protected function client(): PendingRequest
+    {
+        $token = config('api.token');
+
+        return $token ? Http::withToken($token) : Http::withHeaders([]);
     }
 }
