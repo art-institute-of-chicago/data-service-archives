@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\HttpProxy;
 use GuzzleHttp\Client;
 
 class ContentDmClient
@@ -15,7 +16,7 @@ class ContentDmClient
         $this->http = new Client([
             'base_uri' => $this->baseUrl,
             'timeout' => 30,
-        ]);
+        ] + HttpProxy::options());
     }
 
     /**

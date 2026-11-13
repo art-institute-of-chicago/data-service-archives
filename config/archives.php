@@ -10,4 +10,6 @@ return [
     'contentdm_base' => 'https://cdm16735.contentdm.oclc.org',
 
     'batch_size' => 50,
+
+    'curl_proxy' => env('CURL_PROXY'),
 ];

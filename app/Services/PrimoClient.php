@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\HttpProxy;
 use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Log;
 
@@ -16,7 +17,7 @@ class PrimoClient
         $this->http = $http ?? new Client([
             'base_uri' => config('archives.primo_base'),
             'timeout' => 30,
-        ]);
+        ] + HttpProxy::options());
     }
 
     /**

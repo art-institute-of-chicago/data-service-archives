@@ -2,6 +2,7 @@
 
 namespace App\Api;
 
+use App\Support\HttpProxy;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 
@@ -42,6 +43,8 @@ class Agent
     {
         $token = config('api.token');
 
-        return $token ? Http::withToken($token) : Http::withHeaders([]);
+        $client = Http::withOptions(HttpProxy::options());
+
+        return $token ? $client->withToken($token) : $client;
     }
 }

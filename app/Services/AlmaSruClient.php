@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\HttpProxy;
 use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Log;
 use SimpleXMLElement;
@@ -16,7 +17,7 @@ class AlmaSruClient
     public function __construct(?Client $http = null)
     {
         $this->baseUrl = config('archives.alma_sru_base');
-        $this->http = $http ?? new Client(['timeout' => 30]);
+        $this->http = $http ?? new Client(['timeout' => 30] + HttpProxy::options());
         $this->normalizer = new MarcNormalizer();
         $this->classifier = new MarcClassifier();
     }
